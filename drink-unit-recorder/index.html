@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="把个人酒量命名成专属单位，每次饮酒自动换算纯酒精，对比标准单位「氢弹」：1 氢弹 = 75 g 纯酒精。">
+<meta name="theme-color" content="#fff6cc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#241a0e" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>氢弹酒量计</title>
+<style>
+/* 布局：单列手机布局，内容区最大 480px，大屏居中。视觉方向：啤酒风格，淡明黄酒色背景。 */
+:root{
+  --bg:#fff6cc;
+  --surface:#fffdf4;
+  --beer:#fce9ae;
+  --foam:#fffef6;
+  --ink:#3b2f1e;
+  --muted:#7a6238;
+  --line:#ebdcae;
+  --tick:#c9b57e;
+  --accent:#b45309;
+  --accent-soft:#fcebc7;
+  --accent-ink:#ffffff;
+  --bubble:rgba(180,120,20,.16);
+  --danger:#c92a2a;
+  --font-body:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --font-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#241a0e;
+    --surface:#332615;
+    --beer:#3d2e17;
+    --foam:#57431f;
+    --ink:#f6ead2;
+    --muted:#bfa476;
+    --line:#4a3a22;
+    --tick:#7a6540;
+    --accent:#f5a524;
+    --accent-soft:#4a3517;
+    --accent-ink:#2a1c08;
+    --bubble:rgba(245,165,36,.14);
+    --danger:#ff6b6b;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font-body);
+  font-size:15px;
+  line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.app{max-width:480px;margin-inline:auto;display:flex;flex-direction:column;gap:14px;padding-block:18px 28px;position:relative;z-index:1}
+h1,h2,h3{margin:0;text-wrap:balance}
+button{font-family:inherit;font-size:inherit;cursor:pointer}
+input,select{font-family:inherit;font-size:16px;color:var(--ink)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.ic{width:1em;height:1em;fill:var(--accent);vertical-align:-0.12em}
+
+/* 顶栏 */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:18px;letter-spacing:.02em}
+.brand .ic{font-size:22px}
+.brand small{display:block;font-weight:400;font-size:11px;color:var(--muted);letter-spacing:.14em}
+.unit-switch{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.unit-switch select{
+  max-width:150px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);font-size:13px;
+}
+
+/* 啤酒气泡背景装饰 */
+.bubbles{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.bubbles i{position:absolute;bottom:-40px;border-radius:50%;background:var(--bubble);animation:rise linear infinite}
+.bubbles i:nth-child(1){left:8%;width:14px;height:14px;animation-duration:16s}
+.bubbles i:nth-child(2){left:24%;width:8px;height:8px;animation-duration:12s;animation-delay:2s}
+.bubbles i:nth-child(3){left:46%;width:18px;height:18px;animation-duration:20s;animation-delay:5s}
+.bubbles i:nth-child(4){left:64%;width:10px;height:10px;animation-duration:14s;animation-delay:1s}
+.bubbles i:nth-child(5){left:80%;width:16px;height:16px;animation-duration:18s;animation-delay:7s}
+.bubbles i:nth-child(6){left:92%;width:7px;height:7px;animation-duration:11s;animation-delay:3s}
+@keyframes rise{
+  0%{transform:translateY(0);opacity:0}
+  8%{opacity:1}
+  92%{opacity:1}
+  100%{transform:translateY(-110vh);opacity:0}
+}
+@media (prefers-reduced-motion: reduce){.bubbles{display:none}}
+
+/* 卡片 */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.card h2{font-size:15px;font-weight:700;display:flex;align-items:baseline;gap:8px}
+.card h2 .count{font-size:12px;color:var(--muted);font-weight:400;font-family:var(--font-mono)}
+.hint{margin:0;font-size:12px;color:var(--muted)}
+
+/* 读数卡（啤酒杯风格，顶部泡沫） */
+.readout{background:var(--beer);overflow:hidden}
+.foam{display:block;width:calc(100% + 32px);height:18px;margin:-16px -16px 0}
+.readout-label{font-size:11px;letter-spacing:.18em;color:var(--muted)}
+.readout-main{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px;font-size:19px;font-weight:600;min-width:0}
+.readout-main .uname{font-weight:700;overflow-wrap:anywhere}
+.readout-main .big{
+  font-family:var(--font-mono);font-variant-numeric:tabular-nums;
+  font-size:clamp(40px,13vw,52px);font-weight:700;line-height:1.05;letter-spacing:-.02em;
+}
+.readout-main .bunit{color:var(--accent);font-weight:700;display:inline-flex;align-items:center;gap:4px}
+.readout-sub{font-size:12px;color:var(--muted);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.readout-cert{font-size:11px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px}
+.meter{width:100%;height:auto;display:block}
+.meter text{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+
+/* 表单 */
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.chip{
+  border:1px solid var(--line);background:var(--bg);color:var(--ink);
+  border-radius:999px;padding:5px 11px;font-size:12px;
+}
+.chip b{font-family:var(--font-mono);font-weight:600;color:var(--muted)}
+.rows{display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:1fr 1fr auto auto;gap:6px;align-items:center}
+.row input{
+  width:100%;min-width:0;padding:9px 10px;border:1px solid var(--line);border-radius:8px;
+  background:var(--bg);font-family:var(--font-mono);font-size:16px;
+}
+.row input::placeholder{color:var(--tick);font-family:var(--font-body);font-size:13px}
+.row .rg{font-size:11px;color:var(--muted);font-family:var(--font-mono);min-width:44px;text-align:right;font-variant-numeric:tabular-nums}
+.row .rm{
+  border:none;background:none;color:var(--muted);font-size:18px;line-height:1;
+  padding:6px;border-radius:6px;
+}
+.row .rm:hover{color:var(--danger)}
+.add-row{
+  align-self:flex-start;border:1px dashed var(--line);background:none;color:var(--muted);
+  border-radius:8px;padding:7px 12px;font-size:13px;
+}
+.total{
+  display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  border-top:1px solid var(--line);padding-top:10px;font-size:13px;color:var(--muted);
+}
+.total b{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink);font-size:16px}
+.total .tb{color:var(--accent)}
+.primary{
+  border:none;background:var(--accent);color:var(--accent-ink);font-weight:700;
+  border-radius:10px;padding:12px;font-size:15px;letter-spacing:.04em;
+}
+.primary:disabled{opacity:.45;cursor:not-allowed}
+.ghost{border:1px solid var(--line);background:none;color:var(--muted);border-radius:10px;padding:10px;font-size:14px}
+
+/* 历史 */
+.hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.hist li{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line);min-width:0}
+.hist li:first-child{border-top:none;padding-top:0}
+.hist .h-main{flex:1;min-width:0}
+.hist .h-time{font-size:11px;color:var(--muted);font-family:var(--font-mono)}
+.hist .h-drinks{font-size:13px;overflow-wrap:anywhere}
+.hist .h-val{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--accent);white-space:nowrap}
+.hist .h-del{border:none;background:none;color:var(--tick);font-size:12px;padding:4px 6px;border-radius:6px;white-space:nowrap}
+.hist .h-del.armed{color:var(--danger);font-weight:700}
+
+/* 创建单位 */
+.create-form{display:flex;gap:8px}
+.create-form input{
+  flex:1;min-width:0;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);
+}
+.create-form .primary{flex:none;padding-inline:18px}
+
+/* 页脚 / 提示 */
+footer{font-size:11px;color:var(--muted);text-align:center;display:flex;flex-direction:column;gap:4px;padding-top:4px}
+footer p{margin:0}
+.warn{border:1px solid var(--danger);color:var(--danger);background:var(--surface);border-radius:10px;padding:8px 12px;font-size:12px}
+#toast{
+  position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:13px;
+  max-width:min(90vw,420px);text-align:center;z-index:20;box-shadow:0 4px 16px rgba(0,0,0,.18);
+}
+@media (prefers-reduced-motion: no-preference){
+  #toast{transition:opacity .25s}
+}
+</style>
+</head>
+<body>
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-burst" viewBox="0 0 24 24">
+    <path d="M12 1.5 L14.1 8.6 L21.5 6.5 L16.4 12 L21.5 17.5 L14.1 15.4 L12 22.5 L9.9 15.4 L2.5 17.5 L7.6 12 L2.5 6.5 L9.9 8.6 Z"/>
+  </symbol>
+  <symbol id="i-beer" viewBox="0 0 24 24">
+    <path d="M4.8 9C4.8 7.6 5.8 6.6 7 6.4 7.5 5 8.9 4 10.5 4 11.8 4 13 4.6 13.7 5.6 14.2 5.3 14.8 5.2 15.4 5.2 17.2 5.2 18.6 6.6 18.6 8.4 18.6 8.6 18.6 8.8 18.5 9Z"/>
+    <path d="M5.5 10.5H16V18.5C16 20 14.9 21 13.5 21H8C6.6 21 5.5 20 5.5 18.5Z"/>
+    <path d="M16 12H17.5C19.2 12 20.5 13.3 20.5 15 20.5 16.7 19.2 18 17.5 18H16" fill="none" stroke="var(--accent)" stroke-width="1.8"/>
+    <circle cx="8.6" cy="13.6" r="1" fill="var(--foam)"/>
+    <circle cx="12.2" cy="16.4" r="1.2" fill="var(--foam)"/>
+  </symbol>
+</svg>
+
+<div class="bubbles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg class="ic" aria-hidden="true"><use href="#i-beer"/></svg>
+      <span>氢弹酒量计<small>个人酒量单位 · 实测检定</small></span>
+    </div>
+    <div class="unit-switch" id="unitSwitch" hidden>
+      <label for="unitSelect">单位</label>
+      <select id="unitSelect"></select>
+    </div>
+  </header>
+
+  <p class="warn" id="storageWarn" hidden>当前浏览器无法保存数据（可能处于隐私模式），记录仅在本次页面会话内有效。</p>
+
+  <section class="card" id="onboard" hidden>
+    <h2>命名你的酒量单位</h2>
+    <p class="hint">给你的酒量起个专属单位名，比如「zdt」。之后每次饮酒记录都会自动换算成标准单位「氢弹」。</p>
+    <form class="create-form" id="createForm">
+      <input id="unitNameInput" placeholder="例如：zdt" maxlength="20" autocomplete="off" aria-label="单位名称">
+      <button type="submit" class="primary">创建</button>
+    </form>
+    <button type="button" class="ghost" id="cancelCreate" hidden>取消</button>
+    <p class="hint">标准单位：1 氢弹 = 75 g 纯酒精</p>
+  </section>
+
+  <main id="viewRecord" hidden style="display:flex;flex-direction:column;gap:14px">
+    <section class="card readout">
+      <svg class="foam" viewBox="0 0 80 18" preserveAspectRatio="none" aria-hidden="true"><path d="M0 18V10Q8 2 16 10Q24 2 32 10Q40 2 48 10Q56 2 64 10Q72 2 80 10V18Z" fill="var(--foam)"/></svg>
+      <div class="readout-label">当前单位读数</div>
+      <div class="readout-main">
+        <span>1</span><span class="uname" id="roName">—</span><span>=</span>
+        <span class="big" id="roBombs">—</span>
+        <span class="bunit"><svg class="ic" aria-hidden="true"><use href="#i-burst"/></svg>氢弹</span>
+      </div>
+      <div class="readout-sub" id="roSub">尚未记录</div>
+      <svg class="meter" id="meter" viewBox="0 0 320 80" role="img" aria-label="酒精刻度尺"></svg>
+      <div class="readout-cert" id="roCert"></div>
+    </section>
+
+    <section class="card">
+      <h2>记录这一次</h2>
+      <div class="presets" id="presets"></div>
+      <div class="rows" id="drinkRows"></div>
+      <button type="button" class="add-row" id="addRow">＋ 加一杯</button>
+      <div class="total">
+        <span>合计 <b id="formGrams">0</b> g 纯酒精</span>
+        <span>≈ <b class="tb" id="formBombs">0.00</b> 氢弹</span>
+      </div>
+      <button type="button" class="primary" id="saveBtn" disabled>记录这一次</button>
+      <p class="hint">纯酒精 (g) = 容量 ml × 度数 % × 0.8；保存后单位值更新为本次合计。</p>
+    </section>
+
+    <section class="card">
+      <h2>饮酒记录 <span class="count" id="histCount"></span></h2>
+      <ul class="hist" id="history"></ul>
+      <p class="hint" id="histEmpty">还没有记录，先记一次吧。</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>标准单位：1 氢弹 = 75 g 纯酒精 · 换算按乙醇密度 0.8 g/ml</p>
+    <p>约等于 4 杯 473ml 的 5 度拉格啤酒</p>
+    <p>过量饮酒有害健康 · 喝酒不开车</p>
+  </footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function(){
+"use strict";
+var BOMB_G = 75, DENSITY = 0.8, KEY = "drink-unit-recorder.v1";
+var PRESETS = [
+  {label:"啤酒", abv:5}, {label:"红酒", abv:13}, {label:"白酒", abv:52},
+  {label:"威士忌", abv:40}, {label:"清酒", abv:15}
+];
+
+var state = {units:[], sessions:[], activeUnitId:null};
+var storageOK = true;
+
+function $(s){ return document.querySelector(s); }
+function uid(p){ return p + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+/* ---------- 存储 ---------- */
+function load(){
+  try{
+    var raw = localStorage.getItem(KEY);
+    if(raw){
+      var d = JSON.parse(raw);
+      if(d && Array.isArray(d.units) && Array.isArray(d.sessions)){
+        state.units = d.units; state.sessions = d.sessions; state.activeUnitId = d.activeUnitId || null;
+      }
+    }
+  }catch(e){ storageOK = false; }
+  if(!state.units.some(function(u){ return u.id === state.activeUnitId; })){
+    state.activeUnitId = state.units.length ? state.units[0].id : null;
+  }
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(state)); }
+  catch(e){ storageOK = false; $("#storageWarn").hidden = false; }
+}
+
+/* ---------- 换算 ---------- */
+function drinkGrams(ml, abv){ return ml * abv / 100 * DENSITY; }
+function totalGrams(drinks){
+  return drinks.reduce(function(s,d){ return s + drinkGrams(d.ml, d.abv); }, 0);
+}
+function fmtG(x){
+  var v = Math.round(x*10)/10;
+  return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1));
+}
+function fmtB(x){ return (x / BOMB_G).toFixed(2); }
+function activeUnit(){
+  return state.units.find(function(u){ return u.id === state.activeUnitId; }) || null;
+}
+function sessionsOf(unitId){
+  return state.sessions.filter(function(s){ return s.unitId === unitId; })
+    .sort(function(a,b){ return b.createdAt - a.createdAt; });
+}
+function fmtTime(ts){
+  var d = new Date(ts), now = new Date();
+  var hm = ("0"+d.getHours()).slice(-2) + ":" + ("0"+d.getMinutes()).slice(-2);
+  if(d.toDateString() === now.toDateString()) return "今天 " + hm;
+  var md = (d.getMonth()+1) + "月" + d.getDate() + "日";
+  if(d.getFullYear() !== now.getFullYear()) md = d.getFullYear() + "年" + md;
+  return md + " " + hm;
+}
+
+/* ---------- 刻度尺 ---------- */
+function renderMeter(g){
+  var svg = $("#meter");
+  var val = g || 0;
+  var step = val > 300 ? 100 : (val > 150 ? 50 : 25);
+  var max = Math.max(BOMB_G, Math.ceil(val/step)*step);
+  var padL = 26, padR = 26, W = 320, plotW = W - padL - padR;
+  var x = function(v){ return padL + v/max*plotW; };
+  var base = 46, out = [];
+  out.push('<line x1="'+padL+'" y1="'+base+'" x2="'+(W-padR)+'" y2="'+base+'" stroke="var(--tick)" stroke-width="1.5"/>');
+  for(var v=0; v<=max; v+=step){
+    var tx = x(v);
+    out.push('<line x1="'+tx+'" y1="'+base+'" x2="'+tx+'" y2="'+(base+6)+'" stroke="var(--tick)" stroke-width="1.5"/>');
+    out.push('<text x="'+tx+'" y="'+(base+18)+'" font-size="9" fill="var(--muted)" text-anchor="middle">'+v+'g</text>');
+  }
+  var bx = x(BOMB_G);
+  out.push('<line x1="'+bx+'" y1="18" x2="'+bx+'" y2="'+base+'" stroke="var(--accent)" stroke-width="1" stroke-dasharray="3 3" opacity="0.65"/>');
+  out.push('<text x="'+bx+'" y="'+(base+31)+'" font-size="8.5" fill="var(--accent)" text-anchor="middle">1 氢弹</text>');
+  if(val > 0){
+    var px = Math.min(Math.max(x(val), padL), W-padR);
+    var label = fmtG(val) + " g";
+    var lx = Math.min(Math.max(px, padL+14), W-padR-14);
+    out.push('<text x="'+lx+'" y="10" font-size="10.5" font-weight="700" fill="var(--accent)" text-anchor="middle">'+label+'</text>');
+    out.push('<line x1="'+px+'" y1="15" x2="'+px+'" y2="'+base+'" stroke="var(--accent)" stroke-width="2"/>');
+    out.push('<path d="M '+px+' '+(base-1)+' l -4.5 -7 h 9 Z" fill="var(--accent)"/>');
+  }else{
+    out.push('<text x="'+padL+'" y="10" font-size="10" fill="var(--muted)">待记录</text>');
+  }
+  svg.innerHTML = out.join("");
+}
+
+/* ---------- 渲染 ---------- */
+function renderUnitSelect(){
+  var sel = $("#unitSelect");
+  var has = state.units.length > 0;
+  $("#unitSwitch").hidden = !has;
+  if(!has){ sel.innerHTML = ""; return; }
+  sel.innerHTML = state.units.map(function(u){
+    return '<option value="'+u.id+'"'+(u.id===state.activeUnitId?' selected':'')+'>'+esc(u.name)+'</option>';
+  }).join("") + '<option value="__new">＋ 新建单位…</option>';
+}
+
+function renderReadout(){
+  var u = activeUnit();
+  if(!u) return;
+  $("#roName").textContent = u.name;
+  var has = typeof u.currentGrams === "number" && u.currentGrams > 0;
+  $("#roBombs").textContent = has ? fmtB(u.currentGrams) : "—";
+  $("#roSub").textContent = has
+    ? fmtG(u.currentGrams) + " g 纯酒精 · 最近记录 " + fmtTime(u.lastSessionAt)
+    : "尚未记录 · 单位值 = 最近一次记录的酒精量";
+  $("#roCert").textContent = "单位编号 " + u.id.toUpperCase() + " · 检定方式：实测记录 · 共 " + (u.sessionCount||0) + " 次";
+  renderMeter(has ? u.currentGrams : 0);
+}
+
+function renderHistory(){
+  var u = activeUnit(); if(!u) return;
+  var list = sessionsOf(u.id);
+  $("#histCount").textContent = list.length ? list.length + " 次" : "";
+  $("#histEmpty").hidden = list.length > 0;
+  $("#history").innerHTML = list.map(function(s){
+    var drinks = s.drinks.map(function(d){ return d.ml + "ml×" + d.abv + "%"; }).join(" + ");
+    return '<li>' +
+      '<div class="h-main">' +
+        '<div class="h-time">' + fmtTime(s.createdAt) + '</div>' +
+        '<div class="h-drinks">' + esc(drinks) + '</div>' +
+      '</div>' +
+      '<div class="h-val">' + fmtG(s.grams) + ' g<br>' + fmtB(s.grams) + ' 氢弹</div>' +
+      '<button type="button" class="h-del" data-del="'+s.id+'" aria-label="删除这条记录">删除</button>' +
+    '</li>';
+  }).join("");
+}
+
+function applyRoute(){
+  var has = state.units.length > 0;
+  var force = $("#onboard").dataset.force === "1";
+  $("#onboard").hidden = has && !force;
+  $("#viewRecord").hidden = !has || force;
+}
+
+function renderAll(){
+  renderUnitSelect(); renderReadout(); renderHistory(); applyRoute();
+}
+
+/* ---------- 表单 ---------- */
+function addRow(ml, abv){
+  var div = document.createElement("div");
+  div.className = "row";
+  div.innerHTML =
+    '<input type="number" inputmode="decimal" min="0" step="any" class="in-ml" placeholder="容量 ml" aria-label="容量（毫升）" value="'+(ml||"")+'">' +
+    '<input type="number" inputmode="decimal" min="0" max="100" step="any" class="in-abv" placeholder="度数 %" aria-label="酒精度数（百分比）" value="'+(abv||"")+'">' +
+    '<span class="rg"></span>' +
+    '<button type="button" class="rm" aria-label="移除这一杯">×</button>';
+  $("#drinkRows").appendChild(div);
+  div.querySelector(".rm").addEventListener("click", function(){
+    div.remove();
+    if(!$("#drinkRows").children.length) addRow();
+    updateFormTotal();
+  });
+  div.querySelectorAll("input").forEach(function(inp){
+    inp.addEventListener("input", updateFormTotal);
+  });
+  updateFormTotal();
+  return div;
+}
+
+function readRows(){
+  var rows = [], valid = [];
+  document.querySelectorAll("#drinkRows .row").forEach(function(r){
+    var ml = parseFloat(r.querySelector(".in-ml").value);
+    var abv = parseFloat(r.querySelector(".in-abv").value);
+    var ok = isFinite(ml) && ml > 0 && isFinite(abv) && abv > 0 && abv <= 100;
+    var g = ok ? drinkGrams(ml, abv) : 0;
+    r.querySelector(".rg").textContent = ok ? fmtG(g) + " g" : "";
+    if(ok){ valid.push({ml:ml, abv:abv}); }
+    rows.push(ok);
+  });
+  return valid;
+}
+
+function updateFormTotal(){
+  var valid = readRows();
+  var g = totalGrams(valid);
+  $("#formGrams").textContent = fmtG(g);
+  $("#formBombs").textContent = fmtB(g);
+  $("#saveBtn").disabled = valid.length === 0;
+}
+
+function resetForm(){
+  $("#drinkRows").innerHTML = "";
+  addRow();
+}
+
+function saveSession(){
+  var u = activeUnit(); if(!u) return;
+  var drinks = readRows();
+  if(!drinks.length){ toast("请先填写至少一杯（容量和度数）"); return; }
+  var g = totalGrams(drinks);
+  var now = Date.now();
+  state.sessions.push({id:uid("s"), unitId:u.id, drinks:drinks, grams:g, createdAt:now});
+  u.currentGrams = g; u.lastSessionAt = now; u.sessionCount = (u.sessionCount||0) + 1;
+  save(); resetForm(); renderAll();
+  toast("已记录：" + fmtG(g) + " g ≈ " + fmtB(g) + " 氢弹");
+}
+
+function deleteSession(id){
+  var idx = state.sessions.findIndex(function(s){ return s.id === id; });
+  if(idx < 0) return;
+  var s = state.sessions[idx];
+  state.sessions.splice(idx,1);
+  var u = state.units.find(function(x){ return x.id === s.unitId; });
+  if(u){
+    var rest = sessionsOf(u.id);
+    u.sessionCount = rest.length;
+    if(rest.length){ u.currentGrams = rest[0].grams; u.lastSessionAt = rest[0].createdAt; }
+    else{ u.currentGrams = null; u.lastSessionAt = null; }
+  }
+  save(); renderAll();
+  toast("已删除一条记录");
+}
+
+/* ---------- 单位 ---------- */
+function createUnit(name){
+  name = name.trim();
+  if(!name){ toast("请先输入单位名"); return; }
+  $("#onboard").dataset.force = "";
+  var dup = state.units.find(function(u){ return u.name.toLowerCase() === name.toLowerCase(); });
+  if(dup){
+    state.activeUnitId = dup.id; save(); renderAll();
+    toast("已有同名单位，已切换到「" + dup.name + "」");
+    return;
+  }
+  var u = {id:uid("u"), name:name, currentGrams:null, lastSessionAt:null, sessionCount:0, createdAt:Date.now()};
+  state.units.push(u);
+  state.activeUnitId = u.id;
+  save(); resetForm(); renderAll();
+  $("#unitNameInput").value = "";
+  toast("单位「" + name + "」已创建，开始记录吧");
+}
+
+function showOnboard(force){
+  $("#onboard").dataset.force = force ? "1" : "";
+  $("#cancelCreate").hidden = !force;
+  applyRoute();
+  $("#unitNameInput").focus();
+}
+
+/* ---------- 提示 ---------- */
+var toastTimer = null;
+function toast(msg){
+  var t = $("#toast");
+  t.textContent = msg; t.hidden = false; t.style.opacity = "1";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){
+    t.style.opacity = "0";
+    setTimeout(function(){ t.hidden = true; }, 260);
+  }, 2400);
+}
+
+/* ---------- 事件 ---------- */
+$("#createForm").addEventListener("submit", function(e){
+  e.preventDefault();
+  createUnit($("#unitNameInput").value);
+});
+$("#cancelCreate").addEventListener("click", function(){
+  $("#onboard").dataset.force = "";
+  applyRoute();
+});
+$("#unitSelect").addEventListener("change", function(){
+  if(this.value === "__new"){ showOnboard(true); this.value = state.activeUnitId; return; }
+  state.activeUnitId = this.value; save(); renderAll();
+});
+$("#addRow").addEventListener("click", function(){
+  var r = addRow(); r.querySelector(".in-ml").focus();
+});
+$("#saveBtn").addEventListener("click", saveSession);
+$("#presets").innerHTML = PRESETS.map(function(p,i){
+  return '<button type="button" class="chip" data-p="'+i+'">'+p.label+' <b>'+p.abv+'%</b></button>';
+}).join("");
+$("#presets").addEventListener("click", function(e){
+  var b = e.target.closest(".chip"); if(!b) return;
+  var p = PRESETS[+b.dataset.p];
+  var r = addRow("", p.abv);
+  r.querySelector(".in-ml").focus();
+});
+$("#history").addEventListener("click", function(e){
+  var b = e.target.closest("[data-del]"); if(!b) return;
+  if(b.classList.contains("armed")){ deleteSession(b.dataset.del); return; }
+  b.classList.add("armed"); b.textContent = "确认?";
+  setTimeout(function(){ b.classList.remove("armed"); b.textContent = "删除"; }, 2500);
+});
+/* ---------- 启动 ---------- */
+load();
+if(!storageOK) $("#storageWarn").hidden = false;
+resetForm();
+renderAll();
+})();
+</script>
+</body>
+</html>
